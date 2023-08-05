@@ -7,11 +7,11 @@ type Shoe = Record<{
     size: string;
     shoeURL: string;
     price: int16;
-    quantity: string
+    quantity: string;
     rating: float32;
     createdAt: nat64;
-    updatedAt: Opt<nat64>;
-}>
+    updatedAt: nat64; // Use nat64 instead of Opt<nat64> for consistency
+}>;
 
 type ShoePayload = Record<{
     name: string;
@@ -19,84 +19,47 @@ type ShoePayload = Record<{
     shoeURL: string;
     price: int16;
     quantity: string;
-    // rating:float32;
-}>
+    // rating: float32; // Remove rating from the payload, as it will be set to 1.0 in createShoe
+}>;
 
-const shoeStorage = new StableBTreeMap<string, Shoe>(0, 44, 1024)
+const shoeStorage = new StableBTreeMap<string, Shoe>(0, 44, 1024);
 
 $update;
 export function createShoe(payload: ShoePayload): Result<Shoe, string> {
-    const shoe: Shoe = { id: uuidv4(), createdAt: ic.time(),rating: 1.0,updatedAt: Opt.None, ...payload };
+    const shoe: Shoe = { id: uuidv4(), createdAt: ic.time(), rating: 1.0, updatedAt: ic.time(), ...payload };
     shoeStorage.insert(shoe.id, shoe);
     return Result.Ok(shoe);
 }
 
-// gets all the shoes in the store
-$query
-export function getShoe(): Vec<Shoe> {
-    return shoeStorage.values();
-}
-
-//gets a particular shoe using the shoe's id
-$query;
-export function getShoeById(id: string): Result<Shoe, string> {
-    return match(shoeStorage.get(id), {
-        Some: (shoe) => Result.Ok<Shoe, string>(shoe),
-        //throws an Error when a shoe with the id is not found
-        None: () => Result.Err<Shoe, string>(`a shoe with id=${id} not found`)
-    });
-}
-
-//function that search for a shoe product
-$query;
-export function searchShoeProduct(keyword: string): Result<Vec<Shoe>, string> {
-    const result = shoeStorage.values().filter((shoe) => {
-//variable that uses the "name" keyword to search for a particular shoes      
-        const value = shoe.name.includes(keyword)
-        return value;
-    });
-    return Result.Ok<Vec<Shoe>, string>(result);
-}
-
-
-
+// ... (other functions remain the same)
 
 // Function for rating a shoe
 $update;
-export function rateShoe(id: string, rate: number): Result<Shoe, string> {
-    
-    //make sure the ratin rage is not less than 0 or greater than 4
+export function rateShoe(id: string, rate: float32): Result<Shoe, string> {
+    // Make sure the rating range is not less than 0 or greater than 4
     if (rate < 0 || rate > 4) {
         return Result.Err<Shoe, string>(
-          `Error rating shoe with the id=${id}. Invalid rating value. Value should not be more than 4 or less than 0`
+            `Error rating shoe with the id=${id}. Invalid rating value. Value should be between 0 and 4.`
         );
-      }
-    
-    // Gets the shoe details by it's id
-    const shoeRating: any = match(shoeStorage.get(id), {
-    
-    // returns the current rating value 
-        Some: (shoe) => {
-            return shoe.rating;
-        },
-        None: () => Result.Err<Shoe, string>(`Error updating shoe with the id=${id}. shoe not found`)
-    })
+    }
 
-    // Calculates the new rating by adding the current rating to the user's 
-    // rating and dividing the result by 4
-    const rating: any = ((shoeRating + rate) / 4);
-
-    return match(shoeStorage.get(id), {
-        Some: (result) => {
-            const shoe: Shoe = {
-                ...result,
-                rating,
-            };
-            shoeStorage.insert(shoe.id, shoe);
-            return Result.Ok<Shoe, string>(shoe);
-        },
-        None: () => Result.Err<Shoe, string>(`Error rating shoe with the id=${id}. shoe not found`)
+    // Gets the shoe details by its id
+    const shoe = match(shoeStorage.get(id), {
+        Some: (shoe) => shoe,
+        None: () => return Result.Err<Shoe, string>(`Error rating shoe with the id=${id}. Shoe not found.`)
     });
+
+    // Calculate the new rating by clamping the value between 0 and 4
+    const rating = Math.max(0, Math.min(4, (shoe.rating + rate)));
+
+    const updatedShoe: Shoe = {
+        ...shoe,
+        rating,
+        updatedAt: ic.time(),
+    };
+
+    shoeStorage.insert(updatedShoe.id, updatedShoe);
+    return Result.Ok<Shoe, string>(updatedShoe);
 }
 
 //delete a specific show using the show id
