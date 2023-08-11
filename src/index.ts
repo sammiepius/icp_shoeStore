@@ -1,7 +1,8 @@
-import { $query, $update, Record, StableBTreeMap, Vec, match, Result, nat64, ic, Opt, int, float32, int8, int16 } from 'azle';
+import { $query, $update, Record, StableBTreeMap, match, Result, nat64, ic, float32, int16, Principal, nat32 } from 'azle';
 import { v4 as uuidv4 } from 'uuid';
 
 type Shoe = Record<{
+    creator: Principal;
     id: string;
     name: string;
     size: string;
@@ -9,8 +10,9 @@ type Shoe = Record<{
     price: int16;
     quantity: string;
     rating: float32;
+    ratingCount: nat32;
     createdAt: nat64;
-    updatedAt: nat64; // Use nat64 instead of Opt<nat64> for consistency
+    updatedAt: nat64;
 }>;
 
 type ShoePayload = Record<{
@@ -19,42 +21,50 @@ type ShoePayload = Record<{
     shoeURL: string;
     price: int16;
     quantity: string;
-    // rating: float32; // Remove rating from the payload, as it will be set to 1.0 in createShoe
 }>;
 
 const shoeStorage = new StableBTreeMap<string, Shoe>(0, 44, 1024);
 
+
+$query
+export function getShoe(id: string): Result<Shoe,string> {
+    return match(shoeStorage.get(id),{
+        Some: (shoe) => Result.Ok<Shoe,string>(shoe),
+        None: () => Result.Err<Shoe,string>(`shoe with the id=${id} not found.`)
+    })
+}
+
 $update;
 export function createShoe(payload: ShoePayload): Result<Shoe, string> {
-    const shoe: Shoe = { id: uuidv4(), createdAt: ic.time(), rating: 1.0, updatedAt: ic.time(), ...payload };
+    const shoe: Shoe = {creator:ic.caller(), id: uuidv4(), createdAt: ic.time(), rating: 0, updatedAt: ic.time(), ratingCount: 0, ...payload };
     shoeStorage.insert(shoe.id, shoe);
     return Result.Ok(shoe);
 }
 
-// ... (other functions remain the same)
-
 // Function for rating a shoe
 $update;
 export function rateShoe(id: string, rate: float32): Result<Shoe, string> {
-    // Make sure the rating range is not less than 0 or greater than 4
-    if (rate < 0 || rate > 4) {
+    // Make sure the rating range is not less than 1 or greater than 5
+    if (rate < 1 || rate > 5) {
         return Result.Err<Shoe, string>(
-            `Error rating shoe with the id=${id}. Invalid rating value. Value should be between 0 and 4.`
+            `Error rating shoe with the id=${id}. Invalid rating value. Value should be between 1 and 5.`
         );
     }
 
     // Gets the shoe details by its id
     const shoe = match(shoeStorage.get(id), {
-        Some: (shoe) => shoe,
-        None: () => return Result.Err<Shoe, string>(`Error rating shoe with the id=${id}. Shoe not found.`)
+        Some: (shoe) => Result.Ok<Shoe,string>(shoe),
+        None: () => Result.Err<Shoe, string>(`Error rating shoe with the id=${id}. Shoe not found.`)
     });
 
-    // Calculate the new rating by clamping the value between 0 and 4
-    const rating = Math.max(0, Math.min(4, (shoe.rating + rate)));
+    if(!shoe.Ok){
+        return Result.Err<Shoe, string>(shoe.Err)
+    }
 
     const updatedShoe: Shoe = {
-        ...shoe,
-        rating,
+        ...shoe.Ok,
+        rating: shoe.Ok.rating + rate,
+        ratingCount: shoe.Ok.ratingCount + 1,
         updatedAt: ic.time(),
     };
 
@@ -65,8 +75,14 @@ export function rateShoe(id: string, rate: float32): Result<Shoe, string> {
 //delete a specific show using the show id
 $update;
 export function deleteShoe(id: string): Result<Shoe, string> {
-    return match(shoeStorage.remove(id), {
-        Some: (deletedShoe) => Result.Ok<Shoe, string>(deletedShoe),
+    return match(shoeStorage.get(id), {
+        Some: (shoe) => {
+            if(shoe.creator.toString() !== ic.caller().toString()){
+                return Result.Err<Shoe, string>("You are not the creator of this shoe")
+            }
+            shoeStorage.remove(id);
+            return Result.Ok<Shoe, string>(shoe)
+        },
         None: () => Result.Err<Shoe, string>(`couldn't delete a shoe with id=${id}. shoe not found.`)
     });
 }
@@ -77,7 +93,10 @@ $update;
 export function updateStore(id: string, payload: ShoePayload): Result<Shoe, string> {
     return match(shoeStorage.get(id), {
         Some: (shoe) => {
-            const updatedStore: Shoe = {...shoe, ...payload, updatedAt: Opt.Some(ic.time())};
+            if(shoe.creator.toString() !== ic.caller().toString()){
+                return Result.Err<Shoe, string>("You are not the creator of this shoe")
+            }
+            const updatedStore: Shoe = {...shoe, ...payload, updatedAt: ic.time()};
             shoeStorage.insert(shoe.id, updatedStore);
             return Result.Ok<Shoe, string>(updatedStore);
         },
