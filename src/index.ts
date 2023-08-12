@@ -1,4 +1,4 @@
-import { $query, $update, Record, StableBTreeMap, match, Result, nat64, ic, float32, int16, Principal, nat32 } from 'azle';
+import { $query, $update, Record, StableBTreeMap, match,Vec, Result, nat64, ic, float32, int16, Principal, nat32 } from 'azle';
 import { v4 as uuidv4 } from 'uuid';
 
 type Shoe = Record<{
@@ -26,6 +26,13 @@ type ShoePayload = Record<{
 const shoeStorage = new StableBTreeMap<string, Shoe>(0, 44, 1024);
 
 
+// gets all the shoes in the store
+$query
+export function getShoes(): Vec<Shoe> {
+    return shoeStorage.values();
+}
+
+//gets a particular shoe using the shoe's id
 $query
 export function getShoe(id: string): Result<Shoe,string> {
     return match(shoeStorage.get(id),{
@@ -34,12 +41,26 @@ export function getShoe(id: string): Result<Shoe,string> {
     })
 }
 
+
 $update;
 export function createShoe(payload: ShoePayload): Result<Shoe, string> {
     const shoe: Shoe = {creator:ic.caller(), id: uuidv4(), createdAt: ic.time(), rating: 0, updatedAt: ic.time(), ratingCount: 0, ...payload };
     shoeStorage.insert(shoe.id, shoe);
     return Result.Ok(shoe);
 }
+
+
+//function that search for a shoe product
+$query;
+export function searchShoeProduct(keyword: string): Result<Vec<Shoe>, string> {
+    const result = shoeStorage.values().filter((shoe) => {
+//variable that uses the "name" keyword to search for a particular shoes      
+        const value = shoe.name.includes(keyword)
+        return value;
+    });
+    return Result.Ok<Vec<Shoe>, string>(result);
+}
+
 
 // Function for rating a shoe
 $update;
@@ -71,6 +92,7 @@ export function rateShoe(id: string, rate: float32): Result<Shoe, string> {
     shoeStorage.insert(updatedShoe.id, updatedShoe);
     return Result.Ok<Shoe, string>(updatedShoe);
 }
+
 
 //delete a specific show using the show id
 $update;
@@ -116,4 +138,3 @@ globalThis.crypto = {
         return array;
     }
 };
-

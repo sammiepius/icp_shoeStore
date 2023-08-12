@@ -1,10 +1,12 @@
 type Shoe = record {
   id : text;
+  creator : principal;
+  ratingCount : nat32;
   name : text;
   createdAt : nat64;
   size : text;
   shoeURL : text;
-  updatedAt : opt nat64;
+  updatedAt : nat64;
   quantity : text;
   rating : float32;
   price : int16;
@@ -21,9 +23,9 @@ type _AzleResult_1 = variant { Ok : vec Shoe; Err : text };
 service : () -> {
   createShoe : (ShoePayload) -> (_AzleResult);
   deleteShoe : (text) -> (_AzleResult);
-  getShoe : () -> (vec Shoe) query;
-  getShoeById : (text) -> (_AzleResult) query;
-  rateShoe : (text, float64) -> (_AzleResult);
+  getShoe : (text) -> (_AzleResult) query;
+  getShoes : () -> (vec Shoe) query;
+  rateShoe : (text, float32) -> (_AzleResult);
   searchShoeProduct : (text) -> (_AzleResult_1) query;
   updateStore : (text, ShoePayload) -> (_AzleResult);
 }
