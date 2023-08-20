@@ -7,7 +7,7 @@ type Shoe = record {
   size : text;
   shoeURL : text;
   updatedAt : nat64;
-  quantity : text;
+  quantity : int16;
   rating : float32;
   price : int16;
 };
@@ -15,7 +15,7 @@ type ShoePayload = record {
   name : text;
   size : text;
   shoeURL : text;
-  quantity : text;
+  quantity : int16;
   price : int16;
 };
 type _AzleResult = variant { Ok : Shoe; Err : text };
